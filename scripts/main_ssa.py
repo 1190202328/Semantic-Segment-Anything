@@ -71,9 +71,9 @@ def main(rank, args):
                 "nvidia/segformer-b5-finetuned-ade-640-640").to(rank)
         elif args.dataset == 'cityscapes' or args.dataset == 'foggy_driving':
             semantic_branch_processor = SegformerFeatureExtractor.from_pretrained(
-                "nvidia/segformer-b5-finetuned-cityscapes-1024-1024")
+                "/home/cx_xchen/jiangjing/exps/Semantic-Segment-Anything/ckp/segformer-b5-finetuned-cityscapes-1024-1024-main")
             semantic_branch_model = SegformerForSemanticSegmentation.from_pretrained(
-                "nvidia/segformer-b5-finetuned-cityscapes-1024-1024").to(rank)
+                "/home/cx_xchen/jiangjing/exps/Semantic-Segment-Anything/ckp/segformer-b5-finetuned-cityscapes-1024-1024-main").to(rank)
         else:
             raise NotImplementedError()
     else:

@@ -4,9 +4,8 @@ import torch.nn.functional as F
 from PIL import Image
 import mmcv
 from tqdm import tqdm
-from mmcv.utils import print_log
-from mmdet.core.visualization.image import imshow_det_bboxes
-from mmseg.core import intersect_and_union, pre_eval_to_metrics
+from mmcv import imshow_det_bboxes
+from mmengine import dump
 from collections import OrderedDict
 from prettytable import PrettyTable
 import numpy as np
@@ -120,7 +119,7 @@ def semantic_annotation_pipeline(filename, data_path, output_path, rank, save_im
         del mask_categories
         del class_ids_patch_huge
         
-    mmcv.dump(anns, os.path.join(output_path, filename + '_semantic.json'))
+    dump(anns, os.path.join(output_path, filename + '_semantic.json'))
     print('[Save] save SSA-engine annotation results: ', os.path.join(output_path, filename + '_semantic.json'))
     if save_img:
         for ann in anns['annotations']:
@@ -196,32 +195,55 @@ def semantic_segment_anything_inference(filename, output_path, rank, img=None, s
         del num_class_proposals
         del top_1_propose_class_ids
         del top_1_propose_class_names
-    
-    sematic_class_in_img = torch.unique(semantc_mask)
-    semantic_bitmasks, semantic_class_names = [], []
 
-    # semantic prediction
-    anns['semantic_mask'] = {}
-    for i in range(len(sematic_class_in_img)):
-        class_name = id2label['id2label'][str(sematic_class_in_img[i].item())]
-        class_mask = semantc_mask == sematic_class_in_img[i]
-        class_mask = class_mask.cpu().numpy().astype(np.uint8)
-        semantic_class_names.append(class_name)
-        semantic_bitmasks.append(class_mask)
-        anns['semantic_mask'][str(sematic_class_in_img[i].item())] = maskUtils.encode(np.array((semantc_mask == sematic_class_in_img[i]).cpu().numpy(), order='F', dtype=np.uint8))
-        anns['semantic_mask'][str(sematic_class_in_img[i].item())]['counts'] = anns['semantic_mask'][str(sematic_class_in_img[i].item())]['counts'].decode('utf-8')
-    
-    if save_img:
-        imshow_det_bboxes(img,
-                            bboxes=None,
-                            labels=np.arange(len(sematic_class_in_img)),
-                            segms=np.stack(semantic_bitmasks),
-                            class_names=semantic_class_names,
-                            font_size=25,
-                            show=False,
-                            out_file=os.path.join(output_path, filename + '_semantic.png'))
-        print('[Save] save SSA prediction: ', os.path.join(output_path, filename + '_semantic.png'))
-    mmcv.dump(anns, os.path.join(output_path, filename + '_semantic.json'))
+    # Generate the final segmentation result
+    segmentation_result = torch.zeros((h, w), dtype=torch.int32)
+
+    # Iterate through the classes and assign the class labels to the segmentation result
+    sematic_class_in_img = torch.unique(semantc_mask)
+    for class_id in sematic_class_in_img:
+        class_mask = (semantc_mask == class_id)
+        segmentation_result[class_mask] = class_id.item()
+    # Convert the segmentation result to a numpy array
+    segmentation_result_np = segmentation_result.cpu().numpy().astype(np.uint8)
+
+    # Create a new file path with "_labeldx.png" suffix
+    output_filename = filename + '_labeldx.png'
+    output_file_path = os.path.join(output_path, output_filename)
+
+    # Save the segmentation result as a PNG image
+    segmentation_image = Image.fromarray(segmentation_result_np)
+    segmentation_image.save(output_file_path)
+
+    print('[Save] Saved segmentation result as: ', output_file_path)
+
+    dump_result = False
+    if dump_result:
+        sematic_class_in_img = torch.unique(semantc_mask)
+        semantic_bitmasks, semantic_class_names = [], []
+
+        # semantic prediction
+        anns['semantic_mask'] = {}
+        for i in range(len(sematic_class_in_img)):
+            class_name = id2label['id2label'][str(sematic_class_in_img[i].item())]
+            class_mask = semantc_mask == sematic_class_in_img[i]
+            class_mask = class_mask.cpu().numpy().astype(np.uint8)
+            semantic_class_names.append(class_name)
+            semantic_bitmasks.append(class_mask)
+            anns['semantic_mask'][str(sematic_class_in_img[i].item())] = maskUtils.encode(np.array((semantc_mask == sematic_class_in_img[i]).cpu().numpy(), order='F', dtype=np.uint8))
+            anns['semantic_mask'][str(sematic_class_in_img[i].item())]['counts'] = anns['semantic_mask'][str(sematic_class_in_img[i].item())]['counts'].decode('utf-8')
+
+        if save_img:
+            imshow_det_bboxes(img,
+                                bboxes=None,
+                                labels=np.arange(len(sematic_class_in_img)),
+                                segms=np.stack(semantic_bitmasks),
+                                class_names=semantic_class_names,
+                                font_size=25,
+                                show=False,
+                                out_file=os.path.join(output_path, filename + '_semantic.png'))
+            print('[Save] save SSA prediction: ', os.path.join(output_path, filename + '_semantic.png'))
+        dump(anns, os.path.join(output_path, filename + '_semantic.json'))
     # 手动清理不再需要的变量
     del img
     del anns
@@ -235,6 +257,8 @@ def semantic_segment_anything_inference(filename, output_path, rank, img=None, s
     # gc.collect()
     
 def eval_pipeline(gt_path, res_path, dataset):
+    from mmseg.core import intersect_and_union, pre_eval_to_metrics
+    from mmengine.logging import print_log
     logger = None
     if dataset == 'cityscapes' or dataset == 'foggy_driving':
         class_names = ('road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light', 'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car', 'truck', 'bus', 'train', 'motorcycle', 'bicycle')
