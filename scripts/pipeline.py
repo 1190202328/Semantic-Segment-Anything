@@ -168,6 +168,10 @@ def semantic_segment_anything_inference(filename, output_path, rank, img=None, s
     else:
         raise NotImplementedError()
     semantc_mask = class_ids.clone()
+
+    # print(semantc_mask.shape)
+    # torch.Size([1024, 2048])
+
     anns['annotations'] = sorted(anns['annotations'], key=lambda x: x['area'], reverse=True)
     for ann in anns['annotations']:
         valid_mask = torch.tensor(maskUtils.decode(ann['segmentation'])).bool()
@@ -244,15 +248,15 @@ def semantic_segment_anything_inference(filename, output_path, rank, img=None, s
                                 out_file=os.path.join(output_path, filename + '_semantic.png'))
             print('[Save] save SSA prediction: ', os.path.join(output_path, filename + '_semantic.png'))
         dump(anns, os.path.join(output_path, filename + '_semantic.json'))
-    # 手动清理不再需要的变量
-    del img
-    del anns
-    del class_ids
-    del semantc_mask
-    # del bitmasks
-    del class_names
-    del semantic_bitmasks
-    del semantic_class_names
+    # # 手动清理不再需要的变量
+    # del img
+    # del anns
+    # del class_ids
+    # del semantc_mask
+    # # del bitmasks
+    # del class_names
+    # del semantic_bitmasks
+    # del semantic_class_names
 
     # gc.collect()
     

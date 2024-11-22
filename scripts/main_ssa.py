@@ -6,7 +6,7 @@ from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
 from pipeline import semantic_segment_anything_inference, eval_pipeline, img_load
 from configs.ade20k_id2label import CONFIG as CONFIG_ADE20K_ID2LABEL
 from configs.cityscapes_id2label import CONFIG as CONFIG_CITYSCAPES_ID2LABEL
-
+import time
 import torch.distributed as dist
 import torch.multiprocessing as mp
 os.environ['MASTER_ADDR'] = 'localhost'
@@ -100,6 +100,9 @@ def main(rank, args):
         else:
             raise NotImplementedError()
         with torch.no_grad():
+            # 记录开始时间
+            start_time = time.time()
+
             semantic_segment_anything_inference(file_name, args.out_dir, rank, img=img, save_img=args.save_img,
                                    semantic_branch_processor=semantic_branch_processor,
                                    semantic_branch_model=semantic_branch_model,
@@ -107,6 +110,13 @@ def main(rank, args):
                                    dataset=args.dataset,
                                    id2label=id2label,
                                    model=args.model)
+
+
+            # 记录结束时间
+            end_time = time.time()
+            # 计算运行时间并保留两位小数
+            elapsed_time = round(end_time - start_time, 2)
+            print(f"taking {elapsed_time} s")
         # torch.cuda.empty_cache()
     if args.eval and rank==0:
         assert args.gt_path is not None
